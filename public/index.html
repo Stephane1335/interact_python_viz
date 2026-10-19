@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Interactive stock comparison dashboard for CPS*5745."
+    />
+    <title>CPS*5745 Stock Comparison Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: #1e293b;
+        background: #f4f6f9;
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; background: #f4f6f9; }
+      header, main { width: min(1440px, calc(100% - 40px)); margin: 0 auto; }
+      header { padding: 30px 0 22px; }
+      h1 { margin: 0; font-size: clamp(1.7rem, 4vw, 2.45rem); letter-spacing: -0.04em; }
+      .subtitle { margin: 8px 0 4px; color: #64748b; }
+      .course { margin: 0; font-weight: 700; }
+      .filters, .kpi, .chart, .insights {
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+      .filters { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 16px; align-items: end; padding: 18px; }
+      label { display: block; margin-bottom: 7px; color: #475569; font-size: .85rem; font-weight: 600; }
+      select, input, button { min-height: 42px; width: 100%; border: 1px solid #cbd5e1; border-radius: 7px; padding: 9px 11px; background: #fff; color: #1e293b; font: inherit; }
+      select[multiple] { height: 74px; padding: 5px; }
+      button { border: 0; background: #0083b0; color: white; cursor: pointer; font-weight: 700; }
+      button:hover { background: #006b91; }
+      button:disabled { cursor: wait; opacity: .65; }
+      #status { min-height: 24px; margin: 12px 2px; color: #475569; }
+      #status.error { color: #b91c1c; }
+      .section-title { margin: 25px 0 13px; font-size: 1.2rem; }
+      .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .kpi { min-height: 132px; padding: 17px; }
+      .kpi-label { margin: 0 0 12px; color: #64748b; font-size: .88rem; font-weight: 600; }
+      .kpi-value { margin: 0; font-size: clamp(1.25rem, 3vw, 1.8rem); font-weight: 700; overflow-wrap: anywhere; }
+      .kpi-detail { margin: 8px 0 0; color: #64748b; font-size: .85rem; }
+      .chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .chart { min-width: 0; padding: 14px 12px 5px; }
+      .chart.full { margin-top: 16px; }
+      .chart h3 { margin: 3px 8px 0; font-size: 1rem; }
+      .plot { width: 100%; height: 360px; }
+      .chart.full .plot { height: 410px; }
+      .insights { margin: 24px 0 34px; padding: 21px 24px; border: 1px solid #e2e8f0; border-left: 5px solid #0083b0; line-height: 1.65; }
+      .insights h2 { margin: 0 0 11px; font-size: 1.2rem; }
+      .insights ul { margin: 0; padding-left: 22px; }
+      .insights li { margin: 8px 0; }
+      @media (max-width: 800px) {
+        .filters { grid-template-columns: 1fr 1fr; }
+        .filters .tickers { grid-column: 1 / -1; }
+        .chart-grid { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 520px) {
+        header, main { width: min(100% - 24px, 1440px); }
+        .filters, .kpis { grid-template-columns: 1fr; }
+        .filters .tickers { grid-column: auto; }
+        .plot, .chart.full .plot { height: 310px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Interactive Stock Comparison Dashboard</h1>
+      <p class="subtitle">Developed by Jean Stephane Ruben YAPO</p>
+      <p class="course">Developed for CPS*5745</p>
+    </header>
+    <main>
+      <section class="filters" aria-label="Dashboard filters">
+        <div class="tickers">
+          <label for="tickers">Select stocks (Ctrl/Cmd-click for multiple)</label>
+          <select id="tickers" multiple>
+            <option selected>AAPL</option>
+            <option selected>MSFT</option>
+            <option selected>GOOGL</option>
+            <option>NVDA</option>
+            <option>AMZN</option>
+          </select>
+        </div>
+        <div>
+          <label for="start">Start date</label>
+          <input id="start" type="date" />
+        </div>
+        <div>
+          <label for="end">End date</label>
+          <input id="end" type="date" />
+        </div>
+        <button id="update" type="button">Update Dashboard</button>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+
+      <h2 class="section-title">Executive Summary</h2>
+      <section class="kpis" aria-label="Key performance indicators">
+        <article class="kpi"><p class="kpi-label">Best Performing Stock</p><p id="best-value" class="kpi-value">—</p><p id="best-detail" class="kpi-detail">Selected period return</p></article>
+        <article class="kpi"><p class="kpi-label">Highest Average Daily Volume</p><p id="volume-value" class="kpi-value">—</p><p id="volume-detail" class="kpi-detail">Average shares traded per day</p></article>
+        <article class="kpi"><p class="kpi-label">Most Volatile Stock</p><p id="risk-value" class="kpi-value">—</p><p id="risk-detail" class="kpi-detail">Daily return standard deviation</p></article>
+      </section>
+
+      <section class="chart full"><h3>Adjusted Closing Price Over Time</h3><div id="price-chart" class="plot"></div></section>
+      <section class="chart-grid">
+        <article class="chart"><h3>Cumulative Returns Since Start Date</h3><div id="cumulative-chart" class="plot"></div></article>
+        <article class="chart"><h3>Distribution of Daily Percentage Returns</h3><div id="box-chart" class="plot"></div></article>
+        <article class="chart"><h3>Daily Trading Volume by Stock</h3><div id="volume-chart" class="plot"></div></article>
+        <article class="chart"><h3>Pearson Correlation of Daily Returns</h3><div id="correlation-chart" class="plot"></div></article>
+      </section>
+      <section class="insights">
+        <h2>Key Insights &amp; Differences Revealed</h2>
+        <ul id="insights-list"><li>Choose stocks and dates to load analysis.</li></ul>
+      </section>
+    </main>
+    <script>
+      const palette = ["#0083B0", "#00B4DB", "#2E3192", "#11998E", "#38EF7D"];
+      const today = new Date();
+      const yearAgo = new Date(today);
+      yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+      const isoDate = (date) => {
+        const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+        return local.toISOString().slice(0, 10);
+      };
+      document.getElementById("end").value = isoDate(today);
+      document.getElementById("start").value = isoDate(yearAgo);
+      document.getElementById("end").max = isoDate(today);
+
+      const layoutBase = {
+        template: "plotly_white",
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        colorway: palette,
+        font: { color: "#1E293B", family: "Segoe UI, Arial, sans-serif" },
+        margin: { t: 42, r: 20, b: 45, l: 58 },
+        legend: { orientation: "h", y: 1.15, x: 1, xanchor: "right" },
+        autosize: true,
+      };
+      const config = { responsive: true, displaylogo: false };
+      const plot = (id, traces, layout) =>
+        Plotly.react(id, traces, { ...layoutBase, ...layout }, config);
+      const percent = (value) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+      const mean = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+      const standardDeviation = (values) => {
+        if (values.length < 2) return null;
+        const average = mean(values);
+        return Math.sqrt(values.reduce((sum, value) => sum + (value - average) ** 2, 0) / (values.length - 1));
+      };
+      const quantile = (values, fraction) => {
+        const sorted = [...values].sort((a, b) => a - b);
+        if (!sorted.length) return null;
+        const position = (sorted.length - 1) * fraction;
+        const lower = Math.floor(position);
+        return sorted[lower] + (sorted[Math.ceil(position)] - sorted[lower]) * (position - lower);
+      };
+      const valid = (values) => values.filter((value) => value !== null && Number.isFinite(value));
+      const setText = (id, text) => { document.getElementById(id).textContent = text; };
+      const addInsight = (list, text) => {
+        const item = document.createElement("li");
+        item.textContent = text;
+        list.appendChild(item);
+      };
+
+      async function updateDashboard() {
+        const button = document.getElementById("update");
+        const status = document.getElementById("status");
+        const tickers = [...document.getElementById("tickers").selectedOptions].map((option) => option.value);
+        const start = document.getElementById("start").value;
+        const end = document.getElementById("end").value;
+        status.className = "";
+        if (!tickers.length) { status.textContent = "Select at least one ticker."; status.className = "error"; return; }
+        if (!start || !end || start > end) { status.textContent = "Choose a valid start and end date."; status.className = "error"; return; }
+        button.disabled = true;
+        status.textContent = "Loading filtered market data…";
+        try {
+          const query = new URLSearchParams({ tickers: tickers.join(","), start, end });
+          const response = await fetch(`/api/stocks?${query}`);
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Unable to load stock data.");
+          renderDashboard(data);
+          status.textContent = `Showing ${data.tickers.join(", ")} · ${start} to ${end}`;
+        } catch (error) {
+          status.textContent = error.message;
+          status.className = "error";
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      function renderDashboard(data) {
+        const { dates, tickers, adjusted_close: prices, volume } = data;
+        const tickerReturns = {};
+        const performance = {};
+        const averageVolume = {};
+        tickers.forEach((ticker) => {
+          const series = prices[ticker];
+          const observations = series.map((value, index) => ({ value, index })).filter((item) => item.value !== null);
+          if (observations.length) {
+            const first = observations[0].value;
+            const last = observations[observations.length - 1].value;
+            performance[ticker] = (last / first - 1) * 100;
+          }
+          const returns = [];
+          for (let index = 1; index < series.length; index += 1) {
+            if (series[index] !== null && series[index - 1] !== null && series[index - 1] !== 0) {
+              returns.push((series[index] / series[index - 1] - 1) * 100);
+            } else {
+              returns.push(null);
+            }
+          }
+          tickerReturns[ticker] = returns;
+          const volumes = valid(volume[ticker]);
+          if (volumes.length) averageVolume[ticker] = mean(volumes);
+        });
+
+        const best = Object.keys(performance).sort((a, b) => performance[b] - performance[a])[0];
+        const busiest = Object.keys(averageVolume).sort((a, b) => averageVolume[b] - averageVolume[a])[0];
+        const deviations = Object.fromEntries(tickers.map((ticker) => [ticker, standardDeviation(valid(tickerReturns[ticker]))]));
+        const riskCandidates = Object.keys(deviations).filter((ticker) => deviations[ticker] !== null);
+        const riskiest = riskCandidates.sort((a, b) => deviations[b] - deviations[a])[0];
+        setText("best-value", best ? percent(performance[best]) : "N/A");
+        setText("best-detail", best || "No return data");
+        setText("volume-value", busiest ? `${averageVolume[busiest].toLocaleString(undefined, { maximumFractionDigits: 0 })} shares/day` : "N/A");
+        setText("volume-detail", busiest || "No volume data");
+        setText("risk-value", riskiest ? `${deviations[riskiest].toFixed(2)}%` : "N/A");
+        setText("risk-detail", riskiest ? `${riskiest} · daily return standard deviation` : "No return data");
+
+        plot("price-chart", tickers.map((ticker, index) => ({
+          x: dates, y: prices[ticker], type: "scatter", mode: "lines", name: ticker,
+          line: { color: palette[index % palette.length] },
+          hovertemplate: `${ticker}<br>%{x}<br>$%{y:,.2f}<extra></extra>`,
+        })), { title: "Adjusted Closing Price", xaxis: { title: "Date" }, yaxis: { title: "Adjusted close ($)", tickprefix: "$" }, hovermode: "x unified" });
+
+        plot("cumulative-chart", tickers.map((ticker, index) => {
+          const series = prices[ticker];
+          const first = series.find((value) => value !== null);
+          return {
+            x: dates, y: series.map((value) => value === null || first === undefined ? null : (value / first - 1) * 100),
+            type: "scatter", mode: "lines", name: ticker, line: { color: palette[index % palette.length] },
+            hovertemplate: `${ticker}<br>%{x}<br>%{y:+.2f}%<extra></extra>`,
+          };
+        }), { title: "Cumulative return since selected start", xaxis: { title: "Date" }, yaxis: { title: "Return (%)", ticksuffix: "%" }, hovermode: "x unified" });
+
+        plot("box-chart", tickers.map((ticker, index) => ({
+          y: tickerReturns[ticker], type: "box", name: ticker, boxpoints: "outliers",
+          marker: { color: palette[index % palette.length] },
+          hovertemplate: `${ticker}<br>Daily return: %{y:+.2f}%<extra></extra>`,
+        })), { title: "Daily return distribution", yaxis: { title: "Daily return (%)", ticksuffix: "%" }, showlegend: false });
+
+        plot("volume-chart", tickers.map((ticker, index) => ({
+          x: dates, y: volume[ticker], type: "bar", name: ticker,
+          marker: { color: palette[index % palette.length] },
+          hovertemplate: `${ticker}<br>%{x}<br>%{y:,.0f} shares<extra></extra>`,
+        })), { title: "Daily shares traded", xaxis: { title: "Date" }, yaxis: { title: "Shares traded" }, barmode: "group", hovermode: "x" });
+
+        const correlations = tickers.map((tickerA) => tickers.map((tickerB) => {
+          const paired = tickerReturns[tickerA].map((value, index) => [value, tickerReturns[tickerB][index]])
+            .filter(([a, b]) => a !== null && b !== null);
+          if (paired.length < 2) return null;
+          const a = paired.map((pair) => pair[0]);
+          const b = paired.map((pair) => pair[1]);
+          const avgA = mean(a);
+          const avgB = mean(b);
+          const numerator = paired.reduce((sum, pair) => sum + (pair[0] - avgA) * (pair[1] - avgB), 0);
+          const denominator = Math.sqrt(a.reduce((sum, value) => sum + (value - avgA) ** 2, 0) * b.reduce((sum, value) => sum + (value - avgB) ** 2, 0));
+          return denominator ? numerator / denominator : null;
+        }));
+        plot("correlation-chart", [{
+          z: correlations, x: tickers, y: tickers, type: "heatmap", zmin: -1, zmax: 1,
+          colorscale: [[0, palette[2]], [0.5, "#FFFFFF"], [1, palette[0]]],
+          colorbar: { title: "Pearson r" },
+          hovertemplate: "%{y} vs %{x}<br>Pearson r: %{z:.2f}<extra></extra>",
+        }], { title: "Pearson correlation of daily returns", xaxis: { title: "Ticker" }, yaxis: { title: "Ticker", autorange: "reversed" }, showlegend: false });
+
+        const insightList = document.getElementById("insights-list");
+        insightList.replaceChildren();
+        const ranked = Object.entries(performance).sort((a, b) => b[1] - a[1]);
+        if (ranked.length >= 2) {
+          const [topTicker, topReturn] = ranked[0];
+          const [bottomTicker, bottomReturn] = ranked[ranked.length - 1];
+          addInsight(insightList, `Performance diverged by ${(topReturn - bottomReturn).toFixed(2)} percentage points: ${topTicker} returned ${percent(topReturn)}, compared with ${bottomTicker} at ${percent(bottomReturn)}.`);
+        } else if (ranked.length === 1) {
+          addInsight(insightList, `${ranked[0][0]} returned ${percent(ranked[0][1])}; select another stock to compare performance divergence.`);
+        } else {
+          addInsight(insightList, "There is not enough adjusted-price data to compare performance.");
+        }
+        if (riskiest) {
+          const steady = [...riskCandidates].sort((a, b) => deviations[a] - deviations[b])[0];
+          const values = valid(tickerReturns[riskiest]);
+          const iqr = quantile(values, 0.75) - quantile(values, 0.25);
+          addInsight(insightList, `The daily-return distributions show ${riskiest} has the highest volatility (${deviations[riskiest].toFixed(2)}% standard deviation and ${iqr.toFixed(2)}% interquartile range); ${steady} is the steadiest at ${deviations[steady].toFixed(2)}%. Wider boxes and more extreme points indicate greater day-to-day risk.`);
+        } else {
+          addInsight(insightList, "There is not enough daily-return data to assess volatility.");
+        }
+        const pairs = [];
+        for (let row = 0; row < tickers.length; row += 1) {
+          for (let col = row + 1; col < tickers.length; col += 1) {
+            if (correlations[row][col] !== null) pairs.push({ a: tickers[row], b: tickers[col], value: correlations[row][col] });
+          }
+        }
+        if (pairs.length) {
+          const least = [...pairs].sort((a, b) => a.value - b.value)[0];
+          const most = [...pairs].sort((a, b) => b.value - a.value)[0];
+          const interpretation = least.value < 0
+            ? "suggesting the strongest diversification potential"
+            : least.value < 0.5
+              ? "offering relatively better diversification among these pairs"
+              : "indicating limited diversification because all pairs move together";
+          addInsight(insightList, `${least.a} and ${least.b} have the lowest return correlation (Pearson r = ${least.value.toFixed(2)}), ${interpretation}. The strongest co-movement is between ${most.a} and ${most.b} (r = ${most.value.toFixed(2)}).`);
+        } else {
+          addInsight(insightList, "At least two stocks with overlapping daily returns are needed for diversification insights.");
+        }
+      }
+
+      document.getElementById("update").addEventListener("click", updateDashboard);
+      updateDashboard();
+    </script>
+  </body>
+</html>
